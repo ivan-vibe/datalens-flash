@@ -16,7 +16,10 @@ docker compose up -d
 | `ui` | `ghcr.io/ivan-vibe/datalens-flash-ui` | официальный UI DataLens + наш форк (Theme Studio, стриминг чартов) |
 | `monolith` | `ghcr.io/ivan-vibe/datalens-flash-monolith` | весь серверный Rust: US, data-api, charts engine, control-api, meta-manager **и auth** |
 | `postgres` | `ghcr.io/datalens-tech/datalens-postgres:16-1.3.0` | официальная база DataLens |
-| `seed` | тот же образ | one-shot: официальные демо-данные, один раз |
+
+Официальные демо-данные монолит заливает **сам** при первом старте, если в `pg-us-db` нет
+воркбуков (в бинарник встроен официальный demo-набор из образа Postgres). Отдельного
+seed-контейнера нет.
 
 Ничего не собирается локально: `docker compose pull` скачивает готовые образы. База и демо-данные —
 только из официального образа DataLens, в этом репозитории нет ни дампов, ни пользовательских строк.
@@ -39,8 +42,8 @@ cp .env.example .env
 ## Первый запуск
 
 Первый `up` занимает ~1–2 минуты: postgres создаёт базы, монолит накатывает миграции,
-создаёт схему auth и пользователя `admin/admin`, затем `seed` заливает демо-воркбук.
-Прогресс видно в `docker compose logs -f seed`.
+создаёт схему auth и пользователя `admin/admin`, затем сам заливает демо-воркбук.
+Прогресс видно в `docker compose logs -f monolith` (`demo seed: official demo data loaded`).
 
 ## Остановить / снести
 
