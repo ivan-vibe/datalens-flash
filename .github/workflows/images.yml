@@ -28,6 +28,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: source (single-binary monolith)
         run: git clone --depth 1 https://github.com/ivan-vibe/datalens-rust-monolith-embedded-auth.git src-monolith
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -36,10 +38,10 @@ jobs:
       - name: build and push
         run: |
           TAG="${{ github.event.inputs.version || github.ref_name }}"
-          docker build -f src-monolith/deploy/Dockerfile.monolith \
+          docker buildx build --platform linux/amd64,linux/arm64 --push \
+            -f src-monolith/deploy/Dockerfile.monolith \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
             -t "$REGISTRY/$OWNER/datalens-flash-monolith:$TAG" src-monolith
-          docker push "$REGISTRY/$OWNER/datalens-flash-monolith:$TAG"
 
   ui:
     runs-on: ubuntu-latest
@@ -52,6 +54,8 @@ jobs:
             https://github.com/ivan-vibe/datalens-ui-crab/releases/download/v0.3831.0-themes.1/datalens-ui-crab-dist.tar.gz
           tar -xzf dist.tar.gz -C dist
           ls dist | head
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -60,7 +64,7 @@ jobs:
       - name: build and push
         run: |
           TAG="${{ github.event.inputs.version || github.ref_name }}"
-          docker build -f Dockerfile.ui \
+          docker buildx build --platform linux/amd64,linux/arm64 --push \
+            -f Dockerfile.ui \
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
             -t "$REGISTRY/$OWNER/datalens-flash-ui:$TAG" .
-          docker push "$REGISTRY/$OWNER/datalens-flash-ui:$TAG"
