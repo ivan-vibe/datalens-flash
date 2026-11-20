@@ -1,0 +1,5 @@
+# The official DataLens UI image with our built theme-fork dist and the routing that sends
+# /api/run* to the Rust monolith.
+FROM ghcr.io/datalens-tech/datalens-ui:0.3831.0
+COPY dist/ /opt/app/dist/
+COPY ui-nginx.conf /etc/nginx/nginx.conf
