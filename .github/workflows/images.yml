@@ -1,0 +1,66 @@
+name: images
+
+# Builds the two images this repository runs and pushes them to GHCR.
+#   gh workflow run images.yml -f version=v0.1.0
+# or on a v* tag.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image tag (for example v0.1.0)"
+        required: true
+        default: "v0.1.0"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  monolith:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: source (single-binary monolith)
+        run: git clone --depth 1 https://github.com/ivan-vibe/datalens-rust-monolith-embedded-auth.git src-monolith
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build and push
+        run: |
+          TAG="${{ github.event.inputs.version || github.ref_name }}"
+          docker build -f src-monolith/deploy/Dockerfile.monolith \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            -t "$REGISTRY/$OWNER/datalens-flash-monolith:$TAG" src-monolith
+          docker push "$REGISTRY/$OWNER/datalens-flash-monolith:$TAG"
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: download the built UI fork
+        run: |
+          mkdir -p dist
+          curl -fsSL -o dist.tar.gz \
+            https://github.com/ivan-vibe/datalens-ui-crab/releases/download/v0.3831.0-themes.1/datalens-ui-crab-0.3831.0-themes.1-dist.tar.gz
+          tar -xzf dist.tar.gz -C dist
+          ls dist | head
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build and push
+        run: |
+          TAG="${{ github.event.inputs.version || github.ref_name }}"
+          docker build -f Dockerfile.ui \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            -t "$REGISTRY/$OWNER/datalens-flash-ui:$TAG" .
+          docker push "$REGISTRY/$OWNER/datalens-flash-ui:$TAG"
