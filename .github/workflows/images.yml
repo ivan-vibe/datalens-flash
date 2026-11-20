@@ -1,8 +1,13 @@
 name: images
 
-# Builds the two images this repository runs and pushes them to GHCR.
+# Builds the two images this repository runs and publishes them as multi-arch
+# (linux/amd64 + linux/arm64) tags in GHCR.
+#
 #   gh workflow run images.yml -f version=v0.1.0
 # or on a v* tag.
+#
+# Each architecture is built natively (ubuntu-latest / ubuntu-24.04-arm), then a merge job
+# assembles the multi-arch manifest. No QEMU: emulating a Rust release build is too slow.
 on:
   push:
     tags: ["v*"]
@@ -20,51 +25,73 @@ permissions:
 env:
   REGISTRY: ghcr.io
   OWNER: ${{ github.repository_owner }}
+  SOURCE_LABEL: ${{ github.server_url }}/${{ github.repository }}
 
 jobs:
-  monolith:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - name: source (single-binary monolith)
         run: git clone --depth 1 https://github.com/ivan-vibe/datalens-rust-monolith-embedded-auth.git src-monolith
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: build and push
-        run: |
-          TAG="${{ github.event.inputs.version || github.ref_name }}"
-          docker buildx build --platform linux/amd64,linux/arm64 --push \
-            -f src-monolith/deploy/Dockerfile.monolith \
-            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            -t "$REGISTRY/$OWNER/datalens-flash-monolith:$TAG" src-monolith
-
-  ui:
-    runs-on: ubuntu-latest
-    steps:
       - uses: actions/checkout@v4
-      - name: download the built UI fork
+        with:
+          repository: ivan-vibe/datalens-ui-crab
+          ref: main
+          path: ui-crab
+        continue-on-error: true
+      - name: UI fork dist
         run: |
           mkdir -p dist
           curl -fsSL -o dist.tar.gz \
             https://github.com/ivan-vibe/datalens-ui-crab/releases/download/v0.3831.0-themes.1/datalens-ui-crab-dist.tar.gz
-          tar -xzf dist.tar.gz -C dist
+          tar -xzf dist.tar.gz -C dist 2>/dev/null
           ls dist | head
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: build and push
+      - name: build monolith
         run: |
           TAG="${{ github.event.inputs.version || github.ref_name }}"
-          docker buildx build --platform linux/amd64,linux/arm64 --push \
+          docker buildx build --platform linux/${{ matrix.arch }} --push \
+            -f src-monolith/deploy/Dockerfile.monolith \
+            --label "org.opencontainers.image.source=$SOURCE_LABEL" \
+            -t "$REGISTRY/$OWNER/datalens-flash-monolith:$TAG-${{ matrix.arch }}" src-monolith
+      - name: build ui
+        run: |
+          TAG="${{ github.event.inputs.version || github.ref_name }}"
+          docker buildx build --platform linux/${{ matrix.arch }} --push \
             -f Dockerfile.ui \
-            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
-            -t "$REGISTRY/$OWNER/datalens-flash-ui:$TAG" .
+            --label "org.opencontainers.image.source=$SOURCE_LABEL" \
+            -t "$REGISTRY/$OWNER/datalens-flash-ui:$TAG-${{ matrix.arch }}" .
+
+  merge:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: merge manifests
+        run: |
+          TAG="${{ github.event.inputs.version || github.ref_name }}"
+          for name in datalens-flash-monolith datalens-flash-ui; do
+            docker buildx imagetools create -t "$REGISTRY/$OWNER/$name:$TAG" \
+              "$REGISTRY/$OWNER/$name:$TAG-amd64" \
+              "$REGISTRY/$OWNER/$name:$TAG-arm64"
+          done
+          docker buildx imagetools inspect "$REGISTRY/$OWNER/datalens-flash-monolith:$TAG"
