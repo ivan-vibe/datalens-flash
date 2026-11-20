@@ -49,7 +49,7 @@ jobs:
         run: |
           mkdir -p dist
           curl -fsSL -o dist.tar.gz \
-            https://github.com/ivan-vibe/datalens-ui-crab/releases/download/v0.3831.0-themes.1/datalens-ui-crab-0.3831.0-themes.1-dist.tar.gz
+            https://github.com/ivan-vibe/datalens-ui-crab/releases/download/v0.3831.0-themes.1/datalens-ui-crab-dist.tar.gz
           tar -xzf dist.tar.gz -C dist
           ls dist | head
       - uses: docker/login-action@v3
