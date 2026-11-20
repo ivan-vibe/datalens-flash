@@ -1,7 +1,18 @@
 # The official DataLens UI image with our built theme-fork dist and the routing that sends
 # /api/run* to the Rust monolith.
 FROM ghcr.io/datalens-tech/datalens-ui:0.3831.0
-COPY dist/ /opt/app/dist/
-# macOS tarballs carry AppleDouble `._*` siblings; node would require them and crash.
-RUN find /opt/app/dist -name '._*' -delete
+
+# Replace the upstream dist completely (COPY alone would merge into it and the leftover
+# server modules break the fork's feature registry). The image runs as a non-root user, so
+# the replacement happens as root and the original user is restored afterwards.
+USER root
+COPY dist /tmp/dist
+RUN rm -rf /opt/app/dist && mv /tmp/dist /opt/app/dist \
+ && find /opt/app/dist -name '._*' -delete \
+ && chown -R app:app /opt/app/dist
+COPY theme-data /opt/app/theme-data
 COPY ui-nginx.conf /etc/nginx/nginx.conf
+RUN chown -R app:app /opt/app/theme-data
+USER app
+ENV THEMES_DATA_DIR=/opt/app/theme-data \
+    THEMES_DATA_PATH=/opt/app/theme-data/themes.json
