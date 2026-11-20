@@ -45,6 +45,19 @@ cp .env.example .env
 создаёт схему auth и пользователя `admin/admin`, затем сам заливает демо-воркбук.
 Прогресс видно в `docker compose logs -f monolith` (`demo seed: official demo data loaded`).
 
+## Подключения к сервисам на хосте
+
+Монолит работает в контейнере, поэтому `127.0.0.1` внутри него — это сам контейнер, а не
+мак. Для внешней базы (например, ClickHouse на хосте) указывайте:
+
+- `host.docker.internal` и **опубликованный на хосте** порт (для ClickHouse это HTTP-порт),
+  он уже прописан в `extra_hosts` сервиса `monolith`;
+- либо имя контейнера и его внутренний порт, если база в той же docker-сети
+  (`finops-clickhouse:8123`).
+
+Проверено: `test_connection_params` для ClickHouse с `host.docker.internal:18123` и с
+`finops-clickhouse:8123` отвечает 200.
+
 ## Остановить / снести
 
 ```bash
